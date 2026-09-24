@@ -1,0 +1,82 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: wiz-app
+
+---
+# ClusterRoleBinding - Intentionally giving cluster-admin (misconfigured)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: wiz-app-cluster-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: wiz-app-sa
+  namespace: wiz-app
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: wiz-app-sa
+  namespace: wiz-app
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tasky
+  namespace: wiz-app
+  labels:
+    app: tasky
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: tasky
+  template:
+    metadata:
+      labels:
+        app: tasky
+    spec:
+      serviceAccountName: wiz-app-sa
+      containers:
+      - name: tasky
+        image: 181137999457.dkr.ecr.eu-west-1.amazonaws.com/tasky:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: MONGODB_URI
+          value: "mongodb://wizuser:wizpassword@192.168.4.206:27017/tasky?authSource=admin"
+        - name: SECRET_KEY
+          value: "secret123"
+        resources:
+          requests:
+            cpu: 256m
+            memory: 256Mi
+          limits:
+            cpu: 512m
+            memory: 512Mi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tasky-service
+  namespace: wiz-app
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+spec:
+  type: LoadBalancer
+  selector:
+    app: tasky
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
